@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neflixs - Movie & Series Review</title>
+  <!-- CDN Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- CDN Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body 
+  class="bg-gray-900 text-white min-h-screen flex flex-col font-sans" 
+  x-data="movieApp()" 
+  x-init="init()"
+  @keydown.escape.window="closeAllModals()"
+>
+
+  <!-- Navbar + Search -->
+  <header class="bg-gray-800 shadow-md sticky top-0 z-40">
+    <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <h1 class="text-2xl font-bold text-red-600 tracking-wide flex items-center gap-2 cursor-pointer" @click="resetSearch()">
+        🎬 Neflixs
+      </h1>
+      <form @submit.prevent="searchMovies()" class="w-full sm:w-auto flex gap-2">
+        <input 
+          type="text" 
+          x-model="searchQuery" 
+          placeholder="Cari film atau series..." 
+          class="w-full sm:w-80 px-4 py-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-red-500"
+        >
+        <button 
+          type="submit" 
+          class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition duration-200"
+        >
+          Cari
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <!-- Grid Film & Filter Section -->
+  <main class="container mx-auto px-4 py-8 flex-grow">
+    
+    <!-- Title & Filter Controls -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      <h2 class="text-xl font-bold text-gray-200" x-text="isSearching ? 'Hasil Pencarian: ' + searchQuery : (mediaType === 'tv' ? 'Serial TV Populer' : 'Film Populer')"></h2>
+      
+      <!-- Option Controls -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Filter Kategori (Film vs Series) -->
+        <div class="flex items-center gap-2 bg-gray-800 p-1 rounded-lg border border-gray-700 text-sm">
+          <button 
+            @click="changeMediaType('movie')" 
+            :class="mediaType === 'movie' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'"
+            class="px-3 py-1.5 rounded-md font-medium transition"
+          >
+            🎬 Film
+          </button>
+          <button 
+            @click="changeMediaType('tv')" 
+            :class="mediaType === 'tv' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'"
+            class="px-3 py-1.5 rounded-md font-medium transition"
+          >
+            📺 Series
+          </button>
+        </div>
+
+        <!-- Dropdown Urutkan -->
+        <div class="flex items-center gap-2 text-sm">
+          <label class="text-gray-400 font-medium hidden sm:inline">Urutkan:</label>
+          <select 
+            x-model="sortBy" 
+            class="bg-gray-800 text-white border border-gray-700 px-3 py-2 rounded-lg focus:outline-none focus:border-red-500 cursor-pointer"
+          >
+            <option value="default">Populer</option>
+            <option value="year_desc">Tahun Rilis (Terbaru)</option>
+            <option value="year_asc">Tahun Rilis (Terlama)</option>
+            <option value="rating">Rating Tertinggi</option>
+            <option value="az">Abjad A-Z</option>
+            <option value="za">Abjad Z-A</option>
+          </select>
+        </div>
+
+        <!-- Tombol Reset Search -->
+        <button 
+          x-show="isSearching" 
+          @click="resetSearch()" 
+          class="text-sm text-red-400 hover:underline"
+        >
+          ← Kembali
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div x-show="loading" class="flex flex-col items-center justify-center py-20">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+      <p class="mt-4 text-gray-400">Memuat data dari TMDB...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div x-show="!loading && filteredMovies().length === 0" class="text-center py-20">
+      <p class="text-xl text-gray-400">Data tidak ditemukan 😢</p>
+      <p class="text-sm text-gray-500 mt-2">Coba kata kunci atau filter pengurutan yang lain.</p>
+    </div>
+
+    <!-- Card Container -->
+    <div x-show="!loading && filteredMovies().length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+      <template x-for="item in filteredMovies()" :key="item.id">
+        <div 
+          @click="openDetail(item.id)" 
+          class="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:scale-105 transition duration-300 cursor-pointer flex flex-col justify-between border border-gray-700"
+        >
+          <img 
+            :src="item.poster_path ? 'https://image.tmdb.org/t/p/w500' + item.poster_path : 'https://via.placeholder.com/500x750?text=No+Poster'" 
+            :alt="item.title || item.name" 
+            class="w-full h-72 object-cover"
+          >
+          <div class="p-4 flex-grow flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-base line-clamp-1" x-text="item.title || item.name"></h3>
+              <p class="text-sm text-gray-400 mt-1" x-text="(item.release_date || item.first_air_date) ? (item.release_date || item.first_air_date).split('-')[0] : 'TBA'"></p>
+            </div>
+            <div class="flex items-center gap-1 mt-3 text-yellow-400 font-semibold text-sm">
+              <span>⭐</span>
+              <span x-text="item.vote_average ? item.vote_average.toFixed(1) : 'N/A'"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+
+  <!-- Modal Detail Utama -->
+  <div 
+    x-show="showModal" 
+    x-transition 
+    class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-40 overflow-y-auto"
+    style="display: none;"
+  >
+    <div 
+      @click.outside="closeModal()" 
+      class="bg-gray-800 rounded-xl max-w-2xl w-full p-6 relative shadow-2xl my-8 border border-gray-700 max-h-[90vh] overflow-y-auto"
+    >
+      <!-- Close Button Detail -->
+      <button 
+        @click="closeModal()" 
+        type="button"
+        class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700 transition z-10"
+      >
+        &times;
+      </button>
+
+      <!-- Modal Loading -->
+      <div x-show="modalLoading" class="text-center py-10">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+        <p class="mt-2 text-gray-400 text-sm">Mengambil detail...</p>
+      </div>
+
+      <!-- Modal Content -->
+      <div x-show="!modalLoading && selectedMovie" class="flex flex-col sm:flex-row gap-6">
+        <img 
+          :src="selectedMovie?.poster_path ? 'https://image.tmdb.org/t/p/w500' + selectedMovie.poster_path : 'https://via.placeholder.com/500x750?text=No+Poster'" 
+          :alt="selectedMovie?.title || selectedMovie?.name" 
+          class="w-full sm:w-48 h-72 object-cover rounded-lg flex-shrink-0"
+        >
+        <div class="flex flex-col justify-between flex-grow">
+          <div>
+            <h2 class="text-2xl font-bold text-white pr-8" x-text="selectedMovie?.title || selectedMovie?.name"></h2>
+            <div class="flex items-center gap-4 text-sm text-gray-400 mt-2">
+              <span class="text-yellow-400 font-semibold">⭐ <span x-text="selectedMovie?.vote_average?.toFixed(1)"></span></span>
+              <span x-text="'Tahun: ' + ((selectedMovie?.release_date || selectedMovie?.first_air_date) ? (selectedMovie.release_date || selectedMovie.first_air_date).split('-')[0] : '-')"></span>
+            </div>
+            <p class="text-gray-300 mt-4 text-sm leading-relaxed max-h-44 overflow-y-auto pr-1" x-text="selectedMovie?.overview || 'Tidak ada sinopsis tersedia.'"></p>
+          </div>
+
+          <!-- Tombol Pemicu Pop-Up Trailer -->
+          <div class="mt-6">
+            <template x-if="trailerKey">
+              <button 
+                @click="openTrailerModal()" 
+                type="button"
+                class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition shadow-lg hover:scale-105 active:scale-95"
+              >
+                ▶ Nonton Trailer
+              </button>
+            </template>
+            <template x-if="!trailerKey">
+              <span class="text-xs text-gray-500 italic bg-gray-900 px-3 py-1.5 rounded-md">Trailer tidak tersedia</span>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Pop-Up Trailer (Layer Atas) -->
+  <div 
+    x-show="showTrailerModal" 
+    x-transition 
+    class="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
+    style="display: none;"
+  >
+    <div 
+      @click.outside="closeTrailerModal()" 
+      class="bg-gray-900 rounded-xl max-w-3xl w-full p-4 relative shadow-2xl border border-gray-700 flex flex-col gap-3"
+    >
+      <!-- Header Pop-Up Trailer -->
+      <div class="flex justify-between items-center pb-2 border-b border-gray-800">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          🎬 Trailer: <span class="text-red-500" x-text="selectedMovie?.title || selectedMovie?.name"></span>
+        </h3>
+        <button 
+          @click="closeTrailerModal()" 
+          type="button"
+          class="text-gray-400 hover:text-white text-3xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-800 transition"
+        >
+          &times;
+        </button>
+      </div>
+
+      <!-- Container Video Iframe -->
+      <div class="relative w-full aspect-video rounded-lg overflow-hidden bg-black shadow-inner">
+        <template x-if="showTrailerModal && trailerKey">
+          <iframe 
+            :src="'https://www.youtube.com/embed/' + trailerKey + '?autoplay=1&playsinline=1&enablejsapi=1'" 
+            title="Trailer"
+            class="absolute top-0 left-0 w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <footer class="bg-gray-800 text-center py-4 text-gray-500 text-sm mt-auto border-t border-gray-700">
+    Neflixs - TMDB API Stateless Application
+  </footer>
+
+  <!-- Script Alpine.js -->
+  <script>
+    function movieApp() {
+      return {
+        apiKey: '0df643f45b2f683b2817d439dc1e4b0a',
+        movies: [],
+        searchQuery: '',
+        loading: false,
+        isSearching: false,
+        
+        // Filter & Sort State
+        mediaType: 'movie', // 'movie' atau 'tv'
+        sortBy: 'default',   // 'default', 'year_desc', 'year_asc', 'rating', 'az', 'za'
+        
+        // Modal States
+        showModal: false,
+        modalLoading: false,
+        selectedMovie: null,
+        trailerKey: null,
+        showTrailerModal: false,
+
+        init() {
+          this.loadPopularData();
+        },
+
+        async loadPopularData() {
+          this.loading = true;
+          this.isSearching = false;
+          try {
+            const endpoint = `https://api.themoviedb.org/3/${this.mediaType}/popular?api_key=${this.apiKey}&language=id-ID&page=1`;
+            const response = await fetch(endpoint);
+            const data = await response.json();
+            this.movies = data.results || [];
+          } catch (error) {
+            console.error('Gagal mengambil data populer:', error);
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async searchMovies() {
+          if (!this.searchQuery.trim()) return;
+          this.loading = true;
+          this.isSearching = true;
+          try {
+            const endpoint = `https://api.themoviedb.org/3/search/${this.mediaType}?api_key=${this.apiKey}&language=id-ID&query=${encodeURIComponent(this.searchQuery)}`;
+            const response = await fetch(endpoint);
+            const data = await response.json();
+            this.movies = data.results || [];
+          } catch (error) {
+            console.error('Gagal mencari data:', error);
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        changeMediaType(type) {
+          if (this.mediaType === type) return;
+          this.mediaType = type;
+          this.searchQuery = '';
+          this.loadPopularData();
+        },
+
+        // Logika Pengurutan (Sorting)
+        filteredMovies() {
+          let list = [...this.movies];
+          
+          if (this.sortBy === 'year_desc') {
+            list.sort((a, b) => {
+              let dateA = new Date(a.release_date || a.first_air_date || '1970-01-01');
+              let dateB = new Date(b.release_date || b.first_air_date || '1970-01-01');
+              return dateB - dateA;
+            });
+          } else if (this.sortBy === 'year_asc') {
+            list.sort((a, b) => {
+              let dateA = new Date(a.release_date || a.first_air_date || '1970-01-01');
+              let dateB = new Date(b.release_date || b.first_air_date || '1970-01-01');
+              return dateA - dateB;
+            });
+          } else if (this.sortBy === 'rating') {
+            list.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+          } else if (this.sortBy === 'az') {
+            list.sort((a, b) => {
+              let titleA = (a.title || a.name || '').toLowerCase();
+              let titleB = (b.title || b.name || '').toLowerCase();
+              return titleA.localeCompare(titleB);
+            });
+          } else if (this.sortBy === 'za') {
+            list.sort((a, b) => {
+              let titleA = (a.title || a.name || '').toLowerCase();
+              let titleB = (b.title || b.name || '').toLowerCase();
+              return titleB.localeCompare(titleA);
+            });
+          }
+          return list;
+        },
+
+        resetSearch() {
+          this.searchQuery = '';
+          this.sortBy = 'default';
+          this.loadPopularData();
+        },
+
+        async openDetail(id) {
+          this.showModal = true;
+          this.modalLoading = true;
+          this.selectedMovie = null;
+          this.trailerKey = null;
+
+          try {
+            const detailRes = await fetch(`https://api.themoviedb.org/3/${this.mediaType}/${id}?api_key=${this.apiKey}&language=id-ID`);
+            let data = await detailRes.json();
+
+            if (!data.overview || data.overview.trim() === '') {
+              const fallbackRes = await fetch(`https://api.themoviedb.org/3/${this.mediaType}/${id}?api_key=${this.apiKey}&language=en-US`);
+              const fallbackData = await fallbackRes.json();
+              data.overview = fallbackData.overview;
+            }
+
+            this.selectedMovie = data;
+
+            const videoRes = await fetch(`https://api.themoviedb.org/3/${this.mediaType}/${id}/videos?api_key=${this.apiKey}`);
+            const videoData = await videoRes.json();
+            
+            if (videoData.results && videoData.results.length > 0) {
+              const trailer = videoData.results.find(v => v.type === 'Trailer' && v.site === 'YouTube') || 
+                              videoData.results.find(v => v.site === 'YouTube');
+              this.trailerKey = trailer ? trailer.key : null;
+            }
+          } catch (error) {
+            console.error('Gagal mengambil detail:', error);
+          } finally {
+            this.modalLoading = false;
+          }
+        },
+
+        openTrailerModal() {
+          this.showTrailerModal = true;
+        },
+
+        closeTrailerModal() {
+          this.showTrailerModal = false;
+        },
+
+        closeModal() {
+          this.showModal = false;
+          this.showTrailerModal = false;
+        },
+
+        closeAllModals() {
+          if (this.showTrailerModal) {
+            this.closeTrailerModal();
+          } else if (this.showModal) {
+            this.closeModal();
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
